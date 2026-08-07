@@ -1,0 +1,25 @@
+# NAME: Bybit
+# TYPE: Surge RULE-SET
+# SOURCE: https://www.nodeseek.com/post-258950-1
+# SOURCE-UPDATED: 2025-02-11
+# GENERATED: 2026-08-07
+#
+# 推荐默认使用：仅保留原帖中的 Bybit 专属域名。
+# 已排除 Amazon、Firebase、AppsFlyer 等共享域名及可能复用的 CDN IP，
+# 避免将无关服务误分流到 Bybit 策略。
+
+DOMAIN,bybit-exchange.github.io
+DOMAIN-SUFFIX,ffbbbdc6d3c353211fe2ba39c9f744cd.com
+DOMAIN-SUFFIX,ffe390afd658c19dcbf707e0597b846d.de
+DOMAIN-SUFFIX,bybit.biz
+DOMAIN-SUFFIX,bybit.com
+DOMAIN-SUFFIX,bycsi.com
+DOMAIN-SUFFIX,bytick.com
+DOMAIN-SUFFIX,byapis.com
+DOMAIN-SUFFIX,bycbe.com
+DOMAIN-SUFFIX,bymj.io
+DOMAIN-SUFFIX,byabcde.com
+DOMAIN-SUFFIX,byapps.net
+DOMAIN-SUFFIX,byd3c3.com
+DOMAIN-SUFFIX,bybdc6.com
+
