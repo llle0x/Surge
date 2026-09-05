@@ -1,0 +1,13 @@
+#!name=策略｜Apple App Store 代理
+#!desc=App Store、iTunes 与 Apple 静态资源请求走 Proxy 策略。
+#!author=llle0x
+#!category=A｜自用模块
+
+[Rule]
+DOMAIN,s.mzstatic.com,Proxy
+DOMAIN,fpinit.itunes.apple.com,Proxy
+DOMAIN,p37-buy.itunes.apple.com,Proxy
+DOMAIN,p25-buy.itunes.apple.com,Proxy
+DOMAIN,buy.itunes.apple.com,Proxy
+DOMAIN-SUFFIX,itunes.apple.com,Proxy
+DOMAIN-SUFFIX,mzstatic.com,Proxy
