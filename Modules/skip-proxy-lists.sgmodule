@@ -1,7 +1,7 @@
 #!name=Skip Proxy And Real-IP Lists
 #!desc=跳过部分应用的代理检测
 #!author=llle0x
-#!category=A｜自用模块
+#!category=llle0x
 
 # 原作者：mieqq
 # 原始文件：https://raw.githubusercontent.com/mieqq/mieqq/master/skip-proxy-lists.sgmodule
