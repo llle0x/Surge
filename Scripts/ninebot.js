@@ -39,9 +39,6 @@ function notify(subtitle, body) {
 }
 
 function capture() {
-  const argument = typeof $argument === "string" ? $argument : "";
-  if (argument === "-cn-cbu-gateway.ninebot.com") return $done({});
-
   const request = $request || {};
   const url = request.url || "";
   if (!/^https:\/\/cn-cbu-gateway\.ninebot\.com\/(?:portal|app-api)\/api\/user-sign\//i.test(url) ||
