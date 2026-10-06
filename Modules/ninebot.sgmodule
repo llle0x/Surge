@@ -1,13 +1,13 @@
 #!name=九号出行签到
-#!desc=首次抓取 Token 后每天自动签到；抓取成功后在参数中填入 # 关闭 MITM，签到继续使用已保存的 Token。
+#!desc=抓取 Token 后每日自动签到，模块参数可调整签到时间。抓取成功后可禁用抓取脚本和 MITM，继续使用已保存的 Token 签到。
 #!author=llle0x
 #!category=llle0x
-#!arguments=MITM:hostname = %INSERT% cn-cbu-gateway.ninebot.com,CronExp:"20,21 8 * * *"
-#!arguments-desc=MITM 默认添加九号域名用于抓取 Token；抓取成功后把该参数改为 #，停止此模块的 MITM。CronExp 可修改签到时间，默认每天 08:20 和 08:21。
+#!arguments=定时签到:"20,21 8 * * *",禁用脚本:Ninebot_Header,禁用MITM:hostname
+#!arguments-desc=定时签到：Cron 表达式，默认每天 08:20 和 08:21 执行。\n\n禁用脚本：抓取 Token 成功后，输入 # 禁用抓取脚本。\n\n禁用MITM：抓取 Token 成功后，输入 # 停止添加九号域名，减少不必要的 MITM。以上两项不影响定时签到。
 
 [Script]
-Ninebot_Header = type=http-request,pattern=^https://cn-cbu-gateway\.ninebot\.com/(portal|app-api)/api/user-sign/,requires-body=false,script-path=https://raw.githubusercontent.com/llle0x/Surge/main/Scripts/ninebot.js
-Ninebot_Checkin = type=cron,cronexp="{{{CronExp}}}",wake-system=true,timeout=60,script-path=https://raw.githubusercontent.com/llle0x/Surge/main/Scripts/ninebot.js
+{{{禁用脚本}}} = type=http-request,pattern=^https://cn-cbu-gateway\.ninebot\.com/(portal|app-api)/api/user-sign/,requires-body=false,script-path=https://raw.githubusercontent.com/llle0x/Surge/main/Scripts/ninebot.js
+Ninebot_Checkin = type=cron,cronexp="{{{定时签到}}}",wake-system=true,timeout=60,script-path=https://raw.githubusercontent.com/llle0x/Surge/main/Scripts/ninebot.js
 
 [MITM]
-{{{MITM}}}
+{{{禁用MITM}}} = %APPEND% cn-cbu-gateway.ninebot.com
