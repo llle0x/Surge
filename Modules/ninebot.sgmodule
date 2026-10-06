@@ -2,12 +2,12 @@
 #!desc=首次抓取 Token 后每天自动签到；抓取成功后在参数中填入 # 关闭 MITM，签到继续使用已保存的 Token。
 #!author=llle0x
 #!category=llle0x
-#!arguments=MITM
-#!arguments-desc=MITM 参数留空时抓取 Token；抓取成功后填入 #，关闭此模块的 MITM，避免继续解密。每天 08:20 和 08:21 自动签到。
+#!arguments=MITM:hostname = %INSERT% cn-cbu-gateway.ninebot.com,CronExp:"20,21 8 * * *"
+#!arguments-desc=MITM 默认添加九号域名用于抓取 Token；抓取成功后把该参数改为 #，停止此模块的 MITM。CronExp 可修改签到时间，默认每天 08:20 和 08:21。
 
 [Script]
 Ninebot_Header = type=http-request,pattern=^https://cn-cbu-gateway\.ninebot\.com/(portal|app-api)/api/user-sign/,requires-body=false,script-path=https://raw.githubusercontent.com/llle0x/Surge/main/Scripts/ninebot.js
-Ninebot_Checkin = type=cron,cronexp="20,21 8 * * *",wake-system=true,timeout=60,script-path=https://raw.githubusercontent.com/llle0x/Surge/main/Scripts/ninebot.js
+Ninebot_Checkin = type=cron,cronexp="{{{CronExp}}}",wake-system=true,timeout=60,script-path=https://raw.githubusercontent.com/llle0x/Surge/main/Scripts/ninebot.js
 
 [MITM]
-{{{MITM}}}hostname = %INSERT% cn-cbu-gateway.ninebot.com
+{{{MITM}}}

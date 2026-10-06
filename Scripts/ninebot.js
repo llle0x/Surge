@@ -115,6 +115,7 @@ async function signIn(account) {
 }
 
 async function runCron() {
+  console.log("Ninebot cron triggered: " + (typeof $cronexp === "string" ? $cronexp : "manual"));
   const accounts = readAccounts();
   if (!accounts.length) {
     notify("未配置账号", "打开九号 App 签到页抓取 Token");
@@ -129,7 +130,10 @@ async function runCron() {
   $done();
 }
 
-if (typeof $request !== "undefined") capture();
+const isRequest = typeof $script !== "undefined" && $script.type === "cron"
+  ? false
+  : typeof $request !== "undefined";
+if (isRequest) capture();
 else runCron().catch(error => {
   notify("签到失败", error.message || "未知错误");
   $done();
