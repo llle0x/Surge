@@ -15,23 +15,34 @@ function header(headers, name) {
 }
 
 function readAccounts() {
-  const saved = $persistentStore.read(STORE_V2_KEY);
-  if (saved) {
-    try {
-      const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed)) return parsed.filter(a => a && a.deviceId && a.token);
-    } catch (_) { /* Fall back to the original storage format. */ }
-  }
-  return String($persistentStore.read(STORE_KEY) || "")
+  const legacy = String($persistentStore.read(STORE_KEY) || "")
     .split(";").map(item => item.trim()).filter(Boolean)
     .map(item => {
       const colon = item.indexOf(":");
       return colon > 0 ? {
         deviceId: item.slice(0, colon),
-        token: item.slice(colon + 1),
-        tokenHeader: "authorization"
+        token: item.slice(colon + 1)
       } : null;
-    }).filter(Boolean);
+    }).filter(account => account && account.token);
+  if (legacy.length) return legacy;
+
+  // Recover Authorization saved by the previous Surge version.
+  // An access-token alone is not treated as the original Authorization.
+  try {
+    const saved = JSON.parse($persistentStore.read(STORE_V2_KEY) || "null");
+    if (!Array.isArray(saved)) return [];
+    return saved.filter(account => account && account.deviceId).map(account => ({
+      deviceId: account.deviceId,
+      token: account.authorization ||
+        (account.tokenHeader === "authorization" ? account.token : "")
+    })).filter(account => account.token);
+  } catch (_) {
+    return [];
+  }
+}
+
+function serializeAccounts(accounts) {
+  return accounts.map(account => account.deviceId + ":" + account.token).join(";");
 }
 
 function notify(subtitle, body) {
@@ -46,27 +57,21 @@ function capture() {
       String(request.method || "GET").toUpperCase() === "OPTIONS") return $done({});
 
   const headers = request.headers || {};
-  const accessToken = header(headers, "access-token");
-  const authorization = header(headers, "authorization");
-  const token = accessToken || authorization;
-  const tokenHeader = accessToken ? "access-token" : "authorization";
-  const hyphenDeviceId = header(headers, "device-id");
-  const deviceId = hyphenDeviceId || header(headers, "device_id");
-  if (!token || !deviceId) return $done({});
-
-  const accounts = readAccounts();
-  const index = accounts.findIndex(a => a.deviceId === deviceId);
-  const next = { deviceId, token, tokenHeader, deviceHeader: hyphenDeviceId ? "device-id" : "device_id" };
-  if (accessToken && authorization) next.authorization = authorization;
-  if (index >= 0 && accounts[index].token === token &&
-      accounts[index].tokenHeader === tokenHeader &&
-      accounts[index].authorization === next.authorization &&
-      accounts[index].deviceHeader === next.deviceHeader) {
+  const token = header(headers, "authorization");
+  const deviceId = header(headers, "device_id") || header(headers, "device-id");
+  if (!token || !deviceId) {
+    console.log("Ninebot capture: missing Authorization or device_id");
     return $done({});
   }
+
+  const accounts = readAccounts();
+  const index = accounts.findIndex(account => account.deviceId === deviceId);
+  const next = { deviceId, token };
   if (index >= 0) accounts[index] = next;
   else accounts.push(next);
-  if ($persistentStore.write(JSON.stringify(accounts), STORE_V2_KEY)) {
+  const saved = serializeAccounts(accounts);
+  if ($persistentStore.read(STORE_KEY) === saved) return $done({});
+  if ($persistentStore.write(saved, STORE_KEY)) {
     notify("Token 已保存", `账号 ${accounts.length} 个`);
   } else {
     notify("Token 保存失败", "请检查 Surge 持久化存储");
@@ -84,9 +89,8 @@ function request(path, account, method, body) {
     Referer: "https://h5-bj.ninebot.com/",
     "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Segway v6"
   };
-  headers[account.deviceHeader === "device-id" ? "device-id" : "device_id"] = account.deviceId;
-  headers[account.tokenHeader === "access-token" ? "access-token" : "Authorization"] = account.token;
-  if (account.authorization) headers.Authorization = account.authorization;
+  headers.device_id = account.deviceId;
+  headers.Authorization = account.token;
   const options = { url: API + path, headers, timeout: 15 };
   if (body !== undefined) options.body = JSON.stringify(body);
   return new Promise((resolve, reject) => {
@@ -111,6 +115,10 @@ async function signIn(account) {
   const rewards = ((signed.data && signed.data.rewardList) || [])
     .map(item => item.rewardValue ? `+${item.rewardValue} N币` : "").filter(Boolean).join(" ");
   const after = await request(`/status?t=${Date.now()}`, account, "get");
+  if (Number(after.code) !== 0) throw new Error(after.msg || "签到后状态查询失败");
+  if (Number(after.data && after.data.currentSignStatus) !== 1) {
+    throw new Error("签到接口已返回，但复查仍未签到");
+  }
   const finalDays = Number(after.data && after.data.consecutiveDays) || days + 1;
   return `成功 | 连签 ${finalDays} 天${rewards ? ` | ${rewards}` : ""}`;
 }
@@ -120,7 +128,7 @@ async function runCron() {
   const accounts = readAccounts();
   console.log("Ninebot accounts loaded: " + accounts.length);
   if (!accounts.length) {
-    notify("未配置账号", "打开九号 App 签到页抓取 Token");
+    notify("未配置有效账号", "恢复抓取脚本和 MITM，打开九号 App 签到页重新抓取 Authorization");
     return $done();
   }
   const results = [];
