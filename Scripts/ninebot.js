@@ -35,6 +35,7 @@ function readAccounts() {
 }
 
 function notify(subtitle, body) {
+  console.log(TITLE + " | " + subtitle + "\n" + body);
   $notification.post(TITLE, subtitle, body);
 }
 
@@ -117,6 +118,7 @@ async function signIn(account) {
 async function runCron() {
   console.log("Ninebot cron triggered: " + (typeof $cronexp === "string" ? $cronexp : "manual"));
   const accounts = readAccounts();
+  console.log("Ninebot accounts loaded: " + accounts.length);
   if (!accounts.length) {
     notify("未配置账号", "打开九号 App 签到页抓取 Token");
     return $done();
