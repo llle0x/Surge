@@ -14,31 +14,54 @@ function header(headers, name) {
   return key ? String(headers[key]).trim() : "";
 }
 
-function readAccounts() {
-  const legacy = String($persistentStore.read(STORE_KEY) || "")
-    .split(";").map(item => item.trim()).filter(Boolean)
-    .map(item => {
-      const colon = item.indexOf(":");
-      return colon > 0 ? {
-        deviceId: item.slice(0, colon),
-        token: item.slice(colon + 1)
-      } : null;
-    }).filter(account => account && account.token);
-  if (legacy.length) return legacy;
-
-  // Recover Authorization saved by the previous Surge version.
-  // An access-token alone is not treated as the original Authorization.
-  try {
-    const saved = JSON.parse($persistentStore.read(STORE_V2_KEY) || "null");
-    if (!Array.isArray(saved)) return [];
-    return saved.filter(account => account && account.deviceId).map(account => ({
-      deviceId: account.deviceId,
-      token: account.authorization ||
-        (account.tokenHeader === "authorization" ? account.token : "")
-    })).filter(account => account.token);
-  } catch (_) {
-    return [];
+function validateAccount(account) {
+  const deviceId = typeof account.deviceId === "string" ? account.deviceId.trim() : "";
+  const token = typeof account.token === "string" ? account.token.trim() : "";
+  if (!deviceId || /[\s\x00-\x1f\x7f:;"'{}\[\]]/.test(deviceId) ||
+      !token || /[\x00-\x1f\x7f;]/.test(token) || /^[{\["]/.test(token)) {
+    throw new Error("九号账号数据格式异常，已停止请求；原数据未被覆盖");
   }
+  return { deviceId, token };
+}
+
+function decodeStored(value) {
+  // The original storage wrapper decodes JSON before reading credentials.
+  // Accept raw legacy text and JSON-encoded text without treating quotes as IDs.
+  let decoded = value;
+  for (let i = 0; i < 3 && typeof decoded === "string"; i++) {
+    const text = decoded.trim();
+    if (!/^["{\[]/.test(text)) return text;
+    try { decoded = JSON.parse(text); }
+    catch (_) { throw new Error("九号账号 JSON 无效，原数据未被覆盖"); }
+  }
+  return decoded;
+}
+
+function parseStoredAccounts(raw, v2) {
+  if (!raw || !String(raw).trim()) return [];
+  const saved = decodeStored(raw);
+  if (typeof saved === "string" && !v2) {
+    return saved.split(";").map(item => item.trim()).filter(Boolean).map(item => {
+      const colon = item.indexOf(":");
+      if (colon <= 0) throw new Error("九号账号缺少设备 ID 或 Authorization，原数据未被覆盖");
+      return validateAccount({ deviceId: item.slice(0, colon), token: item.slice(colon + 1) });
+    });
+  }
+  if (!Array.isArray(saved)) throw new Error("九号账号格式不受支持，原数据未被覆盖");
+  return saved.map(account => {
+    if (!account || typeof account !== "object") throw new Error("九号账号数据格式异常，原数据未被覆盖");
+    // Never substitute access-token for the original Authorization.
+    const token = account.authorization ||
+      ((!account.tokenHeader || account.tokenHeader === "authorization") ? account.token : "");
+    if (!token) throw new Error("账号缺少 Authorization，请恢复抓取脚本和 MITM 后重新抓取");
+    return validateAccount({ deviceId: account.deviceId, token });
+  });
+}
+
+function readAccounts() {
+  const legacy = parseStoredAccounts($persistentStore.read(STORE_KEY), false);
+  if (legacy.length) return legacy;
+  return parseStoredAccounts($persistentStore.read(STORE_V2_KEY), true);
 }
 
 function serializeAccounts(accounts) {
@@ -64,7 +87,14 @@ function capture() {
     return $done({});
   }
 
-  const accounts = readAccounts();
+  let accounts;
+  try {
+    validateAccount({ deviceId, token });
+    accounts = readAccounts();
+  } catch (error) {
+    notify("Token 未保存", error.message);
+    return $done({});
+  }
   const index = accounts.findIndex(account => account.deviceId === deviceId);
   const next = { deviceId, token };
   if (index >= 0) accounts[index] = next;
@@ -104,18 +134,29 @@ function request(path, account, method, body) {
   });
 }
 
+async function checkResponse(stage, path, account, method, body) {
+  let result;
+  try { result = await request(path, account, method, body); }
+  catch (error) { throw new Error(stage + "：" + error.message); }
+  if (!result || typeof result !== "object" || result.code === undefined ||
+      result.code === null || Number(result.code) !== 0) {
+    const code = result && result.code !== undefined ? String(result.code) : "缺失";
+    // Only report the result code and message; credentials are never logged.
+    const message = result && typeof result.msg === "string" ? result.msg : "接口返回异常";
+    throw new Error(`${stage}（code=${code}）：${message}`);
+  }
+  return result;
+}
+
 async function signIn(account) {
-  const status = await request(`/status?t=${Date.now()}`, account, "get");
-  if (Number(status.code) !== 0) throw new Error(status.msg || "状态查询失败");
+  const status = await checkResponse("查询签到状态失败", `/status?t=${Date.now()}`, account, "get");
   const days = Number(status.data && status.data.consecutiveDays) || 0;
   if (Number(status.data && status.data.currentSignStatus) === 1) return `已签到 | 连签 ${days} 天`;
 
-  const signed = await request("/sign", account, "post", { deviceId: account.deviceId });
-  if (Number(signed.code) !== 0) throw new Error(signed.msg || "签到失败");
+  const signed = await checkResponse("提交签到失败", "/sign", account, "post", { deviceId: account.deviceId });
   const rewards = ((signed.data && signed.data.rewardList) || [])
     .map(item => item.rewardValue ? `+${item.rewardValue} N币` : "").filter(Boolean).join(" ");
-  const after = await request(`/status?t=${Date.now()}`, account, "get");
-  if (Number(after.code) !== 0) throw new Error(after.msg || "签到后状态查询失败");
+  const after = await checkResponse("复查签到状态失败", `/status?t=${Date.now()}`, account, "get");
   if (Number(after.data && after.data.currentSignStatus) !== 1) {
     throw new Error("签到接口已返回，但复查仍未签到");
   }
@@ -124,7 +165,7 @@ async function signIn(account) {
 }
 
 async function runCron() {
-  console.log("Ninebot cron triggered: " + (typeof $cronexp === "string" ? $cronexp : "manual"));
+  console.log("Ninebot v2026.10.07.1 cron triggered: " + (typeof $cronexp === "string" ? $cronexp : "manual"));
   const accounts = readAccounts();
   console.log("Ninebot accounts loaded: " + accounts.length);
   if (!accounts.length) {
